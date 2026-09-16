@@ -1,0 +1,9 @@
+[project]
+name = "hot-cities-viz"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "earthengine-api>=1.7.43",
+    "numpy>=2.5.3",
+    "pillow>=12.3.0",
+]

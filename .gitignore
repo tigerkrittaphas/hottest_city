@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+
+# macOS
+.DS_Store
+
+# Earth Engine pull output: ~11 MB of rasters per run, rebuilt by
+#   EE_PROJECT=... python pull_ghsl_era5.py --out data
+# Regenerating needs Earth Engine credentials and about 40 minutes for 20
+# cities, so commit this instead if collaborators won't have EE access.
+data/
+data_stub/
+
+# Rendered output: gif + mp4 + png (~3.7 MB) and the standalone pages,
+# all rebuilt by render_shape.py / build_html.py from data/.
+out/
+page.html
+heat-cities-shape.html
+
+# Tracked on purpose, listed here so nobody adds them by mistake:
+#   city_heat_rank.csv  the city ranking the 20 cities come from
+#   uv.lock             pinned dependencies
+#   site/index.html     the copy of page.html that GitHub Pages serves
