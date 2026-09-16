@@ -77,6 +77,27 @@ PAGE = """<!DOCTYPE html>
   .note { grid-column: 1 / -1; font-size: 12px; color: var(--ink-quiet);
     line-height: 1.6; border-top: 1px solid var(--rule); padding-top: 16px; max-width: 88ch; }
   .note b { color: var(--warn); font-weight: 600; }
+  .trend { border-top: 1px solid var(--rule); padding-top: 22px; margin-top: 6px; }
+  .trend-head { display: flex; align-items: baseline; justify-content: space-between;
+    gap: 20px; flex-wrap: wrap; }
+  .trend h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  .key { display: flex; gap: 18px; font-size: 12px; color: var(--ink-quiet); }
+  .key span { display: inline-flex; align-items: center; gap: 7px; }
+  .key i { width: 18px; border-top: 2px solid; display: inline-block; }
+  .trend-wrap { position: relative; margin-top: 12px; }
+  .trend svg { width: 100%; height: auto; display: block; }
+  .tip { position: absolute; pointer-events: none; background: var(--ground-up);
+    border: 1px solid var(--rule); border-radius: 3px; padding: 7px 10px; font-size: 12px;
+    color: var(--ink-quiet); white-space: nowrap; line-height: 1.5;
+    transform: translate(-50%, -100%); opacity: 0; transition: opacity .12s; }
+  .tip b { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .table-view { margin-top: 14px; font-size: 12px; color: var(--ink-quiet); }
+  .table-view summary { cursor: pointer; }
+  .table-view table { border-collapse: collapse; margin-top: 10px;
+    font-variant-numeric: tabular-nums; }
+  .table-view th, .table-view td { text-align: right; padding: 3px 14px 3px 0; }
+  .table-view th:first-child, .table-view td:first-child { text-align: left; }
+  .table-view th { color: var(--ink); font-weight: 600; border-bottom: 1px solid var(--rule); }
   @media (max-width: 860px) {
     .stage { padding: 24px 20px; }
     header { flex-direction: column; align-items: flex-start; gap: 10px; }
@@ -98,6 +119,28 @@ PAGE = """<!DOCTYPE html>
   </header>
 
   <div class="cities" id="cities"></div>
+
+  <section class="trend">
+    <div class="trend-head">
+      <div>
+        <h2>Year by year, 1975–2025</h2>
+        <p class="deck" id="trend-deck"></p>
+      </div>
+      <div class="key">
+        <span><i style="border-color:#8494A8"></i>each of the 20 cities</span>
+        <span><i style="border-color:#d95926"></i>20-city mean</span>
+      </div>
+    </div>
+    <div class="trend-wrap">
+      <svg id="trend" viewBox="0 0 1180 300" role="img"
+           aria-label="Mean daily maximum temperature per year, 1975 to 2025, for 20 cities and their mean"></svg>
+      <div class="tip" id="tip"></div>
+    </div>
+    <details class="table-view">
+      <summary>Table view — decade means per city</summary>
+      <div id="trend-table"></div>
+    </details>
+  </section>
 
   <footer>
     <div>
@@ -185,6 +228,7 @@ document.getElementById("note").innerHTML =
 // interpolate the density field, rank cells, draw the top N
 function draw(year) {
   document.getElementById("year").textContent = Math.round(year);
+  markYear(year);                      // the chart shows where the animation is
   DATA.cities.forEach(c => {
     const pop = atYear(c.pop, year);
     const heat = atYear(c.heat, year, HEAT_YEARS);
@@ -247,6 +291,164 @@ function draw(year) {
       ? "squares extend past the built-up area (too dense for the grid)" : "";
   });
 }
+
+// ---- trend chart -------------------------------------------------------
+// 20 cities as context, the 20-city mean as the story. Not 20 categorical
+// hues (past the 8-slot ceiling) and not coloured by temperature either:
+// the y position already encodes that, so hue would re-encode it.
+const NS = "http://www.w3.org/2000/svg";
+const TW = 1180, TH = 300, TM = {t: 14, r: 128, b: 34, l: 46};
+const CONTEXT = "#8494A8", ACCENT = "#d95926";
+const tYears = HEAT_YEARS;
+const tSeries = DATA.cities.map(c => ({name: c.name, v: c.heat}));
+const tMean = tYears.map((_, i) => tSeries.reduce((s, c) => s + c.v[i], 0) / tSeries.length);
+const tAll = [].concat(...tSeries.map(s => s.v));
+const tLo = Math.floor(Math.min(...tAll)) - 0.5, tHi = Math.ceil(Math.max(...tAll)) + 0.5;
+const tx = y => TM.l + (y - tYears[0]) / (tYears[tYears.length-1] - tYears[0]) * (TW - TM.l - TM.r);
+const ty = v => TM.t + (tHi - v) / (tHi - tLo) * (TH - TM.t - TM.b);
+const svg = document.getElementById("trend");
+const tip = document.getElementById("tip");
+
+function svgEl(tag, attrs, text) {
+  const n = document.createElementNS(NS, tag);
+  for (const k in attrs) n.setAttribute(k, attrs[k]);
+  if (text !== undefined) n.textContent = text;   // names are data, never markup
+  svg.appendChild(n);
+  return n;
+}
+
+function linePath(vals, stroke, width, opacity) {
+  const d = vals.map((v, i) => (i ? "L" : "M") + tx(tYears[i]).toFixed(1) + " " + ty(v).toFixed(1)).join(" ");
+  return svgEl("path", {d: d, fill: "none", stroke: stroke, "stroke-width": width,
+                        "stroke-opacity": opacity, "stroke-linejoin": "round", "stroke-linecap": "round"});
+}
+
+// recessive grid: solid hairlines, clean tick values
+for (let v = Math.ceil(tLo / 2) * 2; v <= tHi; v += 2) {
+  svgEl("line", {x1: TM.l, x2: TW - TM.r, y1: ty(v), y2: ty(v), stroke: "#2E3A4A", "stroke-width": 1});
+  svgEl("text", {x: TM.l - 10, y: ty(v) + 4, fill: "#8494A8", "font-size": 11, "text-anchor": "end"}, v + "°");
+}
+for (let y = tYears[0]; y <= tYears[tYears.length-1]; y += 10)
+  svgEl("text", {x: tx(y), y: TH - 12, fill: "#8494A8", "font-size": 11, "text-anchor": "middle"}, y);
+
+const yearMark = svgEl("line", {x1: tx(tYears[0]), x2: tx(tYears[0]), y1: TM.t, y2: TH - TM.b,
+                                stroke: "#E8EDF3", "stroke-width": 1, "stroke-opacity": 0.28});
+tSeries.forEach(s => linePath(s.v, CONTEXT, 1.4, 0.45));
+linePath(tMean, ACCENT, 2, 1);
+
+// direct labels: the extremes and the mean. Text wears ink; the dot carries colour.
+const lastI = tYears.length - 1;
+const hottest = tSeries.reduce((a, b) => b.v[lastI] > a.v[lastI] ? b : a);
+const coolest = tSeries.reduce((a, b) => b.v[lastI] < a.v[lastI] ? b : a);
+[[hottest.name, hottest.v[lastI], CONTEXT, "#8494A8"],
+ ["20-city mean", tMean[lastI], ACCENT, "#E8EDF3"],
+ [coolest.name, coolest.v[lastI], CONTEXT, "#8494A8"]].forEach(([nm, v, dot, ink]) => {
+  svgEl("circle", {cx: tx(tYears[lastI]), cy: ty(v), r: 4, fill: dot, stroke: "#151C26", "stroke-width": 2});
+  svgEl("text", {x: tx(tYears[lastI]) + 11, y: ty(v) + 4, "font-size": 12, fill: ink},
+        nm + " " + v.toFixed(1) + "°");
+});
+
+const cross = svgEl("line", {x1: 0, x2: 0, y1: TM.t, y2: TH - TM.b, stroke: "#E8EDF3",
+                             "stroke-width": 1, "stroke-opacity": 0, "pointer-events": "none"});
+const crossDot = svgEl("circle", {r: 4, fill: ACCENT, stroke: "#151C26", "stroke-width": 2,
+                                  opacity: 0, "pointer-events": "none"});
+const hit = svgEl("rect", {x: TM.l, y: TM.t, width: TW - TM.l - TM.r, height: TH - TM.t - TM.b,
+                           fill: "transparent", tabindex: 0,
+                           "aria-label": "Crosshair: arrow keys step through the years"});
+
+function markYear(y) {
+  const px = tx(Math.max(tYears[0], Math.min(tYears[lastI], y)));
+  yearMark.setAttribute("x1", px);
+  yearMark.setAttribute("x2", px);
+}
+
+// crosshair snaps to the nearest year; the nearest city comes to the pointer,
+// so no line has to be landed on to be read
+function showAt(i, svgY) {
+  const px = tx(tYears[i]);
+  cross.setAttribute("x1", px); cross.setAttribute("x2", px); cross.setAttribute("stroke-opacity", 0.45);
+  crossDot.setAttribute("cx", px); crossDot.setAttribute("cy", ty(tMean[i])); crossDot.setAttribute("opacity", 1);
+  let near = null;
+  if (svgY !== undefined) {
+    let best = Infinity;
+    tSeries.forEach(s => {
+      const dy = Math.abs(ty(s.v[i]) - svgY);
+      if (dy < best) { best = dy; near = s; }
+    });
+  }
+  tip.textContent = "";
+  const mv = document.createElement("b");
+  mv.textContent = tMean[i].toFixed(1) + "°C";
+  tip.append(tYears[i] + "  ", mv, " 20-city mean");
+  if (near) {
+    const cv = document.createElement("b");
+    cv.textContent = near.v[i].toFixed(1) + "°C";
+    tip.append(document.createElement("br"), cv, " " + near.name);
+  }
+  const box = svg.getBoundingClientRect(), k = box.width / TW;
+  tip.style.left = (px * k) + "px";
+  tip.style.top = (ty(tMean[i]) * k - 14) + "px";
+  tip.style.opacity = 1;
+}
+
+function hideCross() {
+  cross.setAttribute("stroke-opacity", 0);
+  crossDot.setAttribute("opacity", 0);
+  tip.style.opacity = 0;
+}
+
+let focusI = Math.round(lastI / 2);
+hit.addEventListener("pointermove", ev => {
+  const box = svg.getBoundingClientRect(), k = TW / box.width;
+  const sx = (ev.clientX - box.left) * k, sy = (ev.clientY - box.top) * k;
+  const span = (tYears[lastI] - tYears[0]) * (sx - TM.l) / (TW - TM.l - TM.r);
+  focusI = Math.max(0, Math.min(lastI, Math.round(span)));
+  showAt(focusI, sy);
+});
+hit.addEventListener("pointerleave", hideCross);
+hit.addEventListener("focus", () => showAt(focusI));
+hit.addEventListener("blur", hideCross);
+hit.addEventListener("keydown", ev => {
+  if (ev.key !== "ArrowLeft" && ev.key !== "ArrowRight") return;
+  focusI = Math.max(0, Math.min(lastI, focusI + (ev.key === "ArrowRight" ? 1 : -1)));
+  showAt(focusI);
+  ev.preventDefault();
+});
+
+// the claim in the deck is measured, not assumed: some of these cities cooled
+const decades = s => [s.v.slice(0, 10).reduce((a, b) => a + b, 0) / 10,
+                      s.v.slice(-10).reduce((a, b) => a + b, 0) / 10];
+const warmed = tSeries.filter(s => { const d = decades(s); return d[1] > d[0]; }).length;
+const meanEarly = tMean.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
+const meanLate = tMean.slice(-10).reduce((a, b) => a + b, 0) / 10;
+document.getElementById("trend-deck").textContent =
+  "Each thin line is one city's mean daily maximum for that year; the orange line is the 20-city mean, "
+  + meanEarly.toFixed(1) + "° across 1975–1984 and " + meanLate.toFixed(1) + "° across 2016–2025. "
+  + warmed + " of the " + tSeries.length + " cities are hotter in the recent decade than the first; "
+  + (tSeries.length - warmed) + " are not. Single years swing with El Niño, so the trend lives in the "
+  + "decade means rather than any one year.";
+
+(function buildTable() {
+  const table = document.createElement("table");
+  const head = document.createElement("tr");
+  ["City", "1975–1984", "2016–2025", "Change"].forEach(h => {
+    const th = document.createElement("th");
+    th.textContent = h;
+    head.appendChild(th);
+  });
+  table.appendChild(head);
+  tSeries.concat([{name: "20-city mean", v: tMean}]).forEach(s => {
+    const d = decades(s), tr = document.createElement("tr");
+    [s.name, d[0].toFixed(1) + "°", d[1].toFixed(1) + "°",
+     (d[1] - d[0] >= 0 ? "+" : "") + (d[1] - d[0]).toFixed(2) + "°"].forEach(val => {
+      const td = document.createElement("td");
+      td.textContent = val;
+      tr.appendChild(td);
+    });
+    table.appendChild(tr);
+  });
+  document.getElementById("trend-table").appendChild(table);
+})();
 
 let year = Y0;
 let playing = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;

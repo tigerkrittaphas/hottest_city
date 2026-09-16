@@ -40,11 +40,13 @@ WARN = (222, 152, 92)
 
 GRID = 16              # cells across each city's tile (fewer = larger squares)
 SPREAD = 0.6           # 0 = squares pack into the core, 1 = spread to the edges
-FIELD_TOP = 200        # top of the square field
-FIELD_H = 520
+HEADER_GAP = 22        # clear space under the header rule, above the first tile
+FIELD_H = 520          # tallest a single row of tiles may get
 YEAR_STEP = 1
-FPS = 10               # gif and mp4 frame rate; --fps overrides
-MAX_COLS = 5           # cities per row; more cities wrap onto a 1920x1080 frame
+FPS = 2 # gif and mp4 frame rate; --fps overrides
+MAX_COLS = 7           # cities per row; more cities wrap onto a 1920x1080 frame
+FOOT_RESERVE = 68      # space kept below the tiles for the legend
+COL_PAD = 24           # horizontal breathing room per column
 
 RAMP = [
     (0.00, (255, 255, 255)),
@@ -171,12 +173,17 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
     cols = math.ceil(n / rows)
     compact = rows > 1                  # wrapped rows: bigger frame, one-line labels
     width, height = (1920, 1080) if compact else (W, H)
+    # the rule sits below whatever the header actually draws, so the big year
+    # number can never collide with it and no space is wasted guessing
+    rule_y = round(max(60 + text_size("2025", f_year)[1],
+                       104 + text_size("Ay", f_deck)[1])) + 18
+    field_top = rule_y + HEADER_GAP
     # name and country sit above each tile, the readout under it
-    head_h = 26 if compact else 52     # label hugs its own tile
-    label_h = 34 if compact else 60    # readout, then a gutter before the next row
-    row_h = (height - 90 - FIELD_TOP) / rows
+    head_h = 32 if compact else 52     # name band: the text, then a gap above the tile
+    label_h = 38 if compact else 60    # readout under the tile, then the row gutter
+    row_h = (height - FOOT_RESERVE - field_top) / rows
     col_w = (width - 110) / cols
-    step = min((col_w - 40) / GRID, (row_h - head_h - label_h) / GRID, FIELD_H / GRID)
+    step = min((col_w - COL_PAD) / GRID, (row_h - head_h - label_h) / GRID, FIELD_H / GRID)
     cell = step * 0.80
     name_size = name_font_size(cities, col_w - 30,
                                (22, 20, 18, 16, 15) if compact else (34, 30, 26, 22))
@@ -235,14 +242,14 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
         yt = str(int(round(year)))
         w = d.textbbox((0, 0), yt, font=f_year)[2]
         d.text((width - 70 - w, 60), yt, font=f_year, fill=INK)
-        d.line([(70, 178), (width - 70, 178)], fill=RULE, width=1)
+        d.line([(70, rule_y), (width - 70, rule_y)], fill=RULE, width=1)
 
         any_overflow = False
         for ci, c in enumerate(cities):
             row, slot = divmod(ci, cols)
             cx = 55 + col_w * (slot + 0.5)
             left = cx - GRID * step / 2
-            top = FIELD_TOP + row * row_h + head_h   # squares start below the label
+            top = field_top + row * row_h + head_h   # squares start below the label
             base = top + GRID * step                 # bottom edge of this city's squares
             pop = at_year(c["pop"], epochs, year)
             heat = at_year(c["heat"], heat_years, year)
@@ -264,7 +271,7 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
             left_label(d, c["name"] + (" *" if overflow else ""), c.get("country", ""),
                        left, top - head_h + 2, name_size)
             if compact:
-                d.text((left, base + 8), f"{pop/1e6:.1f}M   {span}", font=f_read_s, fill=QUIET)
+                d.text((left, base + 6), f"{pop/1e6:.1f}M   {span}", font=f_read_s, fill=QUIET)
             else:
                 d.text((left, base + 26), f"{pop/1e6:.1f}M people   {span} across the city",
                        font=f_read, fill=QUIET)

@@ -8,7 +8,7 @@ where people live. Every square takes its colour from a white–yellow–red ram
 driven by that year's temperature plus the cell's own heat-island offset.
 
 Outputs: `out/heat-cities.gif`, `out/heat-cities.mp4`, `out/heat-cities-final.png`
-(1920×1080, four rows of five) and `page.html`, a standalone interactive page.
+(1920×1080, three rows of seven) and `page.html`, a standalone interactive page.
 
 ## 1. Data sources
 
@@ -108,6 +108,17 @@ The page mirrors this in the browser: grids are quantised to one base-36 charact
 per cell and embedded, so it is a single file with no fetches, with play/pause and
 a year scrubber for jumping to a year mid-discussion.
 
+Below the maps the page carries a **line chart of the same yearly temperatures**,
+1975–2025. Twenty series is past the point where separate colours can be told
+apart, so the chart uses emphasis instead: each city is a thin grey line, the
+20-city mean is the one accent line, and the extremes and the mean are labelled
+directly. A vertical marker tracks the year the maps are showing; a crosshair
+snaps to the nearest year and names the closest city (arrow keys do the same from
+the keyboard), and a table view under the chart carries every decade mean, so no
+value is reachable only by hovering. Lines are **not** coloured by temperature:
+the y position already encodes that, and re-encoding it as hue would spend the
+identity channel on something the chart already shows.
+
 ## Running it
 
 ```bash
@@ -162,8 +173,11 @@ Pages: <https://tigerkrittaphas.github.io/hottest_city/>
   outside the Middle East and the Sahel pale yellow. The tighter range clamps a
   few extremes — the coolest edges of Hyderabad and Delhi go pure white — and the
   legend prints the anchors so the slide stays honest.
-- **16×16 grid at 20 cities**, four rows of five on a 1920×1080 frame. Five or
-  fewer cities render on one row at 1600×900.
+- **16×16 grid at 20 cities**, three rows of seven on a 1920×1080 frame
+  (`MAX_COLS`). Tile size is capped by row height, not by column width, so
+  fewer rows is what makes the maps bigger: at four rows of five each tile was
+  137 px with 224 px of dead space between columns; at three rows of seven it is
+  205 px with a 54 px gap. Seven or fewer cities render on one row at 1600×900.
 
 ## Caveats and open decisions
 
