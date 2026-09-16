@@ -44,7 +44,7 @@ HEADER_GAP = 22        # clear space under the header rule, above the first tile
 FIELD_H = 520          # tallest a single row of tiles may get
 YEAR_STEP = 1
 FPS = 2 # gif and mp4 frame rate; --fps overrides
-MAX_COLS = 7           # cities per row; more cities wrap onto a 1920x1080 frame
+MAX_COLS = 5           # cities per row; more cities wrap onto a 1920x1080 frame
 FOOT_RESERVE = 68      # space kept below the tiles for the legend
 COL_PAD = 24           # horizontal breathing room per column
 

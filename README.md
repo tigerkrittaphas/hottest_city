@@ -8,7 +8,7 @@ where people live. Every square takes its colour from a white–yellow–red ram
 driven by that year's temperature plus the cell's own heat-island offset.
 
 Outputs: `out/heat-cities.gif`, `out/heat-cities.mp4`, `out/heat-cities-final.png`
-(1920×1080, three rows of seven) and `page.html`, a standalone interactive page.
+(1920×1080, four rows of five) and `page.html`, a standalone interactive page.
 
 ## 1. Data sources
 
@@ -129,7 +129,7 @@ export EE_PROJECT=your-cloud-project
 python rank_cities.py city_heat_rank.csv                              # optional, re-rank
 python pull_ghsl_era5.py --out data                                   # full pull
 python pull_ghsl_era5.py --out data --resume                          # only what's missing
-python render_shape.py --data data --out out --lo 28 --hi 38 --fps 3  # gif + mp4 + png
+python render_shape.py --data data --out out --lo 28 --hi 38 --fps 2  # gif + mp4 + png
 python build_html.py --data data --out page.html --lo 28 --hi 38
 ```
 
@@ -173,11 +173,12 @@ Pages: <https://tigerkrittaphas.github.io/hottest_city/>
   outside the Middle East and the Sahel pale yellow. The tighter range clamps a
   few extremes — the coolest edges of Hyderabad and Delhi go pure white — and the
   legend prints the anchors so the slide stays honest.
-- **16×16 grid at 20 cities**, three rows of seven on a 1920×1080 frame
-  (`MAX_COLS`). Tile size is capped by row height, not by column width, so
-  fewer rows is what makes the maps bigger: at four rows of five each tile was
-  137 px with 224 px of dead space between columns; at three rows of seven it is
-  205 px with a 54 px gap. Seven or fewer cities render on one row at 1600×900.
+- **16×16 grid at 20 cities**, four rows of five on a 1920×1080 frame
+  (`MAX_COLS`), because 20 divides evenly into it — seven across would leave a
+  ragged row of six. The cost is tile size: tiles are capped by row height, not
+  by column width, so four rows gives ~136 px tiles with wide gaps between
+  columns, where three rows of seven would give 205 px. Five or fewer cities
+  render on one row at 1600×900.
 
 ## Caveats and open decisions
 
