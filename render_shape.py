@@ -4,7 +4,8 @@ render_shape.py — population squares laid out in the city's own map shape.
 Each square is a fixed slice of population (default 50,000 people). Squares are
 placed on the densest cells of the city's population raster, so the block of
 squares takes the silhouette of the built-up area and grows outward as the city
-grows. Fill colour is the heat metric on a continuous white-yellow-red ramp.
+grows. Fill colour is the heat metric on a continuous white-yellow-red ramp,
+stretched over each city's own range (--scale shared puts all on one range).
 
 Because count and shape are both driven by the data, the picture stays honest:
 the number of squares is the population, the arrangement is where people are.
@@ -164,7 +165,33 @@ def load(data_dir):
     return meta
 
 
-def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
+def color_ranges(meta, lo=None, hi=None, scale="city"):
+    """(lo, hi) of the colour ramp for each city.
+
+    "city" stretches the ramp over each city's own coolest-to-hottest cell across
+    all years, so the pattern inside every city shows; colours then can't be
+    compared between tiles. "shared" puts every city on one range, which --lo
+    and --hi can pin.
+    """
+    spans = []
+    for c in meta["cities"]:
+        occupied = c["grids"][-1] > 0.02
+        off = c["offset"][occupied] if occupied.any() else c["offset"].ravel()
+        spans.append((min(c["heat"]) + float(off.min()), max(c["heat"]) + float(off.max())))
+    if scale == "shared":
+        a, b = min(s[0] for s in spans), max(s[1] for s in spans)
+        pad = 0.03 * (b - a)
+        a = lo if lo is not None else round(a - pad, 1)
+        b = hi if hi is not None else round(b + pad, 1)
+        return [(a, b)] * len(spans)
+    out = []
+    for a, b in spans:
+        pad = 0.03 * max(b - a, 0.5)
+        out.append((round(a - pad, 1), round(b + pad, 1)))
+    return out
+
+
+def build(meta, ranges, unit_label, per_square, spread=SPREAD):
     epochs = meta["epochs"]
     heat_years = meta.get("heat_years", epochs)   # yearly heat; older data is per epoch
     cities = meta["cities"]
@@ -188,6 +215,7 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
     name_size = name_font_size(cities, col_w - 30,
                                (22, 20, 18, 16, 15) if compact else (34, 30, 26, 22))
     synthetic = meta.get("synthetic", False)
+    per_city = len(set(ranges)) > 1
 
     def cells_for(city, year):
         """Top-N densest cells, N set by population; returns (cells, overflow).
@@ -236,7 +264,8 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
         d.text((70, 62), meta.get("title", "Growing into the heat"), font=f_title, fill=INK)
         d.text((70, 104),
                f"One square is {per_square/1000:.0f},000 people, placed where those people live. "
-               f"Each square is coloured by {meta['heat_label']} at that spot.",
+               f"Each square is coloured by {meta['heat_label']} at that spot"
+               + (", on each city's own scale." if per_city else "."),
                font=f_deck, fill=QUIET)
 
         yt = str(int(round(year)))
@@ -253,6 +282,7 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
             base = top + GRID * step                 # bottom edge of this city's squares
             pop = at_year(c["pop"], epochs, year)
             heat = at_year(c["heat"], heat_years, year)
+            lo, hi = ranges[ci]
             t_lo, t_hi = 99.0, -99.0
 
             cells, overflow = cells_for(c, year)
@@ -275,16 +305,45 @@ def build(meta, lo, hi, unit_label, per_square, spread=SPREAD):
             else:
                 d.text((left, base + 26), f"{pop/1e6:.1f}M people   {span} across the city",
                        font=f_read, fill=QUIET)
+            if per_city:
+                # this tile's own ramp, at the right edge of the readout line
+                f_key = f_read_s if compact else f_small
+                key_y = base + (6 if compact else 58)
+                lo_t, hi_t = f"{lo:.1f}", f"{hi:.1f}\u00b0"
+                bar_w = 56 if compact else 90
+                right = left + GRID * step
+                if compact:
+                    right = max(right, left + text_size(f"{pop/1e6:.1f}M   {span}", f_key)[0]
+                                + 18 + text_size(lo_t, f_key)[0] + 6 + bar_w + 6
+                                + text_size(hi_t, f_key)[0])
+                hx = right - text_size(hi_t, f_key)[0]
+                bx = hx - 6 - bar_w
+                lx0 = bx - 6 - text_size(lo_t, f_key)[0]
+                th = text_size("0", f_key)[1]
+                by = key_y + th // 2 - 3
+                for px in range(bar_w):
+                    d.line([(bx + px, by), (bx + px, by + 7)], fill=ramp_color(px / bar_w))
+                d.text((lx0, key_y), lo_t, font=f_key, fill=QUIET)
+                d.text((hx, key_y), hi_t, font=f_key, fill=QUIET)
+            if not compact:
                 if overflow:
-                    d.text((left, base + 54),
+                    d.text((left, base + 80 if per_city else base + 54),
                            "squares extend past the built-up area (too dense for the grid)",
                            font=f_small, fill=QUIET)
 
         lx, ly, lw = 70, height - 48, 300
         for px in range(lw):
             d.line([(lx + px, ly), (lx + px, ly + 12)], fill=ramp_color(px / lw))
-        d.text((lx, ly + 18), f"{lo:.1f}{unit_label}", font=f_small, fill=QUIET)
-        d.text((lx + lw - 52, ly + 18), f"{hi:.1f}{unit_label}", font=f_small, fill=QUIET)
+        if per_city:
+            d.text((lx, ly + 18), "coolest", font=f_small, fill=QUIET)
+            d.text((lx + lw - text_size("hottest", f_small)[0], ly + 18), "hottest",
+                   font=f_small, fill=QUIET)
+            d.text((lx + 76, ly + 18), "each city on its own scale",
+                   font=f_small, fill=QUIET)
+        else:
+            lo, hi = ranges[0]
+            d.text((lx, ly + 18), f"{lo:.1f}{unit_label}", font=f_small, fill=QUIET)
+            d.text((lx + lw - 52, ly + 18), f"{hi:.1f}{unit_label}", font=f_small, fill=QUIET)
         d.text((lx + lw + 40, ly + 2), meta["source_note"], font=f_small,
                fill=WARN if synthetic else QUIET)
         if compact and any_overflow:
@@ -309,25 +368,19 @@ def nice_unit(meta, per_square):
     return max(10_000, round(raw / 10_000) * 10_000)
 
 
-def main(data_dir, out_dir, lo, hi, per_square, spread, fps):
+def main(data_dir, out_dir, lo, hi, per_square, spread, fps, scale):
     meta = load(data_dir)
     per_square = nice_unit(meta, per_square)
     print(f"one square = {per_square:,.0f} people on a {GRID}x{GRID} grid")
     unit_label = meta.get("unit", "")
-    cell_vals = []
-    for c in meta["cities"]:
-        occupied = c["grids"][-1] > 0.02
-        off = c["offset"][occupied] if occupied.any() else c["offset"].ravel()
-        cell_vals += [min(c["heat"]) + float(off.min()), max(c["heat"]) + float(off.max())]
-    span = max(cell_vals) - min(cell_vals)
-    lo = lo if lo is not None else min(cell_vals) - 0.03 * span
-    hi = hi if hi is not None else max(cell_vals) + 0.03 * span
-    print(f"colour ramp anchored {lo:.2f} -> {hi:.2f} {unit_label}")
+    ranges = color_ranges(meta, lo, hi, scale)
+    for c, (a, b) in zip(meta["cities"], ranges):
+        print(f"  {c['name']:<18} colour ramp {a:.1f} -> {b:.1f} {unit_label}")
     if meta.get("synthetic"):
         print("NOTE: synthetic shapes - these are not real city footprints")
 
     os.makedirs(out_dir, exist_ok=True)
-    frames = build(meta, lo, hi, unit_label, per_square, spread)
+    frames = build(meta, ranges, unit_label, per_square, spread)
 
     hold = max(1, round(fps))          # hold the last frame for about a second
     frames[0].save(os.path.join(out_dir, "heat-cities.gif"), save_all=True,
@@ -350,8 +403,10 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--data", dest="data_dir", default="data_stub")
     p.add_argument("--out", dest="out_dir", default="out")
-    p.add_argument("--lo", type=float, default=None)
-    p.add_argument("--hi", type=float, default=None)
+    p.add_argument("--scale", choices=["city", "shared"], default="city",
+                   help="city: each city gets its own colour range; shared: one range for all")
+    p.add_argument("--lo", type=float, default=None, help="shared scale only")
+    p.add_argument("--hi", type=float, default=None, help="shared scale only")
     p.add_argument("--per-square", dest="per_square", type=float, default=None,
                    help="people per square; default fits the grid")
     p.add_argument("--spread", type=float, default=SPREAD,

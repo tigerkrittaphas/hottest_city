@@ -5,7 +5,8 @@ city is drawn as squares laid on its own built-up area, so the block of squares
 takes the shape of the city map. One square is a fixed slice of population, placed
 on the densest cells first, so the count is the population and the arrangement is
 where people live. Every square takes its colour from a white–yellow–red ramp
-driven by that year's temperature plus the cell's own heat-island offset.
+driven by that year's temperature plus the cell's own heat-island offset, on a
+scale fitted to each city.
 
 Outputs: `out/heat-cities.gif`, `out/heat-cities.mp4`, `out/heat-cities-final.png`
 (1920×1080, four rows of five) and `page.html`, a standalone interactive page.
@@ -100,7 +101,9 @@ same data and follow the same rules, so the two agree.
    footprint, ring by ring, and is marked `*` with a footnote. Without this the
    leftovers filled the grid in row order and drew a rectangle.
 6. **Colour** each square by that year's city mean plus the cell's own offset, on
-   a white–yellow–red ramp anchored by `--lo`/`--hi`, which the legend prints.
+   a white–yellow–red ramp stretched over **that city's own range**: its coolest
+   to hottest square across 1975–2025, printed on a small key under each tile.
+   `--scale shared` puts every city on one ramp instead, anchored by `--lo`/`--hi`.
 7. **Animate** 51 frames, one per year. `--fps` sets the rate (the slide render
    uses 3, a 17 s loop); the last frame holds about a second before looping.
 
@@ -129,8 +132,10 @@ export EE_PROJECT=your-cloud-project
 python rank_cities.py city_heat_rank.csv                              # optional, re-rank
 python pull_ghsl_era5.py --out data                                   # full pull
 python pull_ghsl_era5.py --out data --resume                          # only what's missing
-python render_shape.py --data data --out out --lo 28 --hi 38 --fps 2  # gif + mp4 + png
-python build_html.py --data data --out page.html --lo 28 --hi 38
+python render_shape.py --data data --out out --fps 2                  # gif + mp4 + png
+python build_html.py --data data --out page.html
+# one shared ramp for every city instead of one per city:
+python render_shape.py --data data --out out --scale shared --lo 28 --hi 38
 ```
 
 Without Earth Engine access:
@@ -150,7 +155,7 @@ stand-ins.
 which stays ignored as a build product. Refresh it after a rebuild:
 
 ```bash
-python build_html.py --data data --out page.html --lo 28 --hi 38
+python build_html.py --data data --out page.html
 cp page.html site/index.html
 git commit -am "Update published page" && git push
 ```
@@ -169,10 +174,14 @@ Pages: <https://tigerkrittaphas.github.io/hottest_city/>
 - **`--spread` (default 0.6)** reaches the real edge of the built-up area instead
   of packing into the core. The cost is that thin features — a river gap, a narrow
   coastal strip — get partly filled in by stray squares.
-- **Colour anchors 28–38 °C.** The automatic range (25.8–39.2) left everything
-  outside the Middle East and the Sahel pale yellow. The tighter range clamps a
-  few extremes — the coolest edges of Hyderabad and Delhi go pure white — and the
-  legend prints the anchors so the slide stays honest.
+- **Each city gets its own colour scale.** On one shared ramp (even pinned to
+  28–38 °C) the humid coastal cities — Karachi, Jakarta, Manila, Mumbai — sat in
+  a narrow pale band and their hot cores disappeared. Fitting the ramp to each
+  city's own 1975–2025 range shows the pattern inside every city and its warming
+  over time. The cost: the same colour means a different temperature in each
+  tile, so colours can't be compared between cities. Each tile prints its own
+  anchors, the page says so in the deck, and the readout still gives the real
+  °C range. `--scale shared` restores the comparable version.
 - **16×16 grid at 20 cities**, four rows of five on a 1920×1080 frame
   (`MAX_COLS`), because 20 divides evenly into it — seven across would leave a
   ragged row of six. The cost is tile size: tiles are capped by row height, not

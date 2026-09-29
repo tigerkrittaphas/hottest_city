@@ -61,10 +61,14 @@ PAGE = """<!DOCTYPE html>
   .compact .label { margin-top: 6px; font-size: 14px; }
   .compact .readout { margin-top: 2px; font-size: 11.5px; }
   .compact .overflow { font-size: 10.5px; }
+  .city-key { display: inline-flex; align-items: center; gap: 6px; margin-top: 5px;
+    font-size: 11px; color: var(--ink-quiet); font-variant-numeric: tabular-nums; }
+  .city-key i { width: 56px; height: 7px; border-radius: 1px; display: inline-block; }
   footer { border-top: 1px solid var(--rule); padding-top: 20px; display: grid;
     grid-template-columns: 240px 1fr; gap: 36px; align-items: center; }
-  .legend-bar { height: 12px; border-radius: 2px; background: linear-gradient(90deg,
+  .legend-bar, .city-key i { background: linear-gradient(90deg,
     #FFFFFF 0%, #FFE9A8 32%, #FBC02D 55%, #E8632A 80%, #B3161B 100%); }
+  .legend-bar { height: 12px; border-radius: 2px; }
   .legend-scale { display: flex; justify-content: space-between; font-size: 11.5px;
     color: var(--ink-quiet); margin-top: 7px; font-variant-numeric: tabular-nums; }
   .transport { display: flex; align-items: center; gap: 18px; }
@@ -113,7 +117,7 @@ PAGE = """<!DOCTYPE html>
       <h1>__TITLE__</h1>
       <p class="deck">One square is __UNIT__ people, placed on the cells where those people
         live, so each city takes the shape of its own built-up area. Each square is coloured
-        by __HEATLABEL__ at that spot, so the hot core and the cooler edges show separately.</p>
+        by __HEATLABEL__ at that spot, so the hot core and the cooler edges show separately.__SCALENOTE__</p>
     </div>
     <div class="year" id="year">__Y0__</div>
   </header>
@@ -145,7 +149,7 @@ PAGE = """<!DOCTYPE html>
   <footer>
     <div>
       <div class="legend-bar"></div>
-      <div class="legend-scale"><span id="lo"></span><span id="hi"></span></div>
+      <div class="legend-scale"><span id="lo"></span><span id="mid"></span><span id="hi"></span></div>
     </div>
     <div class="transport">
       <button id="play">Pause</button>
@@ -159,8 +163,8 @@ PAGE = """<!DOCTYPE html>
 const DATA = __DATA__;
 const GRID = __GRID__;
 const PER_SQUARE = __PERSQ__;
-const LO = __LO__, HI = __HI__;
 const DIGITS = "0123456789abcdefghijklmnopqrstuvwxyz";
+const PER_CITY = new Set(DATA.cities.map(c => c.lo + "," + c.hi)).size > 1;
 const SECONDS_PER_LOOP = 18;
 const CELL = 22, PAD = 0.80;
 const SPREAD = __SPREAD__;
@@ -210,6 +214,7 @@ DATA.cities.forEach(c => {
   el.innerHTML = `<canvas width="${GRID*CELL}" height="${GRID*CELL}"></canvas>
     <div class="label">${c.name}</div>
     <div class="readout"><b class="pop"></b> people &middot; <b class="heat"></b> across the city</div>
+    ${PER_CITY ? `<div class="city-key"><span>${c.lo.toFixed(1)}</span><i></i><span>${c.hi.toFixed(1)}${DATA.unit}</span></div>` : ""}
     <div class="readout overflow"></div>`;
   host.appendChild(el);
   c.ctx = el.querySelector("canvas").getContext("2d");
@@ -218,8 +223,9 @@ DATA.cities.forEach(c => {
   c.overflowEl = el.querySelector(".overflow");
 });
 
-document.getElementById("lo").textContent = LO + DATA.unit;
-document.getElementById("hi").textContent = HI + DATA.unit;
+document.getElementById("lo").textContent = PER_CITY ? "coolest" : DATA.cities[0].lo + DATA.unit;
+document.getElementById("hi").textContent = PER_CITY ? "hottest" : DATA.cities[0].hi + DATA.unit;
+if (PER_CITY) document.getElementById("mid").textContent = "each city on its own scale";
 document.getElementById("note").innerHTML =
   (DATA.synthetic ? "<b>" + DATA.source_note + "</b> " : DATA.source_note + " ") +
   "Reanalysis temperature does not resolve the urban heat island, so fill shows " +
@@ -280,7 +286,7 @@ function draw(year) {
       const t = heat + c.offset[k];          // city mean + this cell's heat-island offset
       if (t < tLo) tLo = t;
       if (t > tHi) tHi = t;
-      ctx.fillStyle = rampColor((t - LO) / (HI - LO));
+      ctx.fillStyle = rampColor((t - c.lo) / (c.hi - c.lo));
       ctx.fillRect(col * CELL, r * CELL, s, s);
     });
 
@@ -489,37 +495,33 @@ requestAnimationFrame(tick);
 """
 
 
-def main(data_dir, out_path, lo, hi, per_square):
+def main(data_dir, out_path, lo, hi, per_square, scale):
     meta = rs.load(data_dir)
     per_square = rs.nice_unit(meta, per_square)
-    cell_vals = []
-    for c in meta["cities"]:
-        occ = c["grids"][-1] > 0.02
-        off = c["offset"][occ] if occ.any() else c["offset"].ravel()
-        cell_vals += [min(c["heat"]) + float(off.min()), max(c["heat"]) + float(off.max())]
-    span = max(cell_vals) - min(cell_vals)
-    lo = lo if lo is not None else round(min(cell_vals) - 0.03 * span, 1)
-    hi = hi if hi is not None else round(max(cell_vals) + 0.03 * span, 1)
+    ranges = rs.color_ranges(meta, lo, hi, scale)
 
     payload = dict(
         epochs=meta["epochs"], heat_years=meta.get("heat_years", meta["epochs"]),
         unit=meta.get("unit", ""),
         source_note=meta["source_note"], synthetic=meta.get("synthetic", False),
-        cities=[dict(name=c["name"], pop=c["pop"], heat=c["heat"],
+        cities=[dict(name=c["name"], pop=c["pop"], heat=c["heat"], lo=r[0], hi=r[1],
                      offset=[round(float(v), 2) for v in c["offset"].ravel()],
                      dither=[round(float(v), 3) for v in c["dither"].ravel()],
-                     grids=[encode(g) for g in c["grids"]]) for c in meta["cities"]],
+                     grids=[encode(g) for g in c["grids"]])
+                for c, r in zip(meta["cities"], ranges)],
     )
 
     page = (PAGE
             .replace("__TITLE__", meta.get("title", "Growing into the heat"))
             .replace("__HEATLABEL__", meta["heat_label"])
+            .replace("__SCALENOTE__", " Every city has its own colour scale, running from its"
+                     " coolest to its hottest square across 1975\u20132025, so compare colours"
+                     " within a city, not between cities." if len(set(ranges)) > 1 else "")
             .replace("__UNIT__", f"{per_square/1000:.0f},000")
             .replace("__DATA__", json.dumps(payload, separators=(",", ":")))
             .replace("__GRID__", str(rs.GRID))
             .replace("__PERSQ__", str(int(per_square)))
             .replace("__SPREAD__", str(rs.SPREAD))
-            .replace("__LO__", str(lo)).replace("__HI__", str(hi))
             .replace("__Y0__", str(meta["epochs"][0]))
             .replace("__Y1__", str(meta["epochs"][-1])))
 
@@ -531,7 +533,9 @@ if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--data", dest="data_dir", default="data_stub")
     p.add_argument("--out", dest="out_path", default="heat-cities-shape.html")
-    p.add_argument("--lo", type=float, default=None)
-    p.add_argument("--hi", type=float, default=None)
+    p.add_argument("--scale", choices=["city", "shared"], default="city",
+                   help="city: each city gets its own colour range; shared: one range for all")
+    p.add_argument("--lo", type=float, default=None, help="shared scale only")
+    p.add_argument("--hi", type=float, default=None, help="shared scale only")
     p.add_argument("--per-square", dest="per_square", type=float, default=None)
     main(**vars(p.parse_args()))
