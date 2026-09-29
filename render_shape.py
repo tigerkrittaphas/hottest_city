@@ -4,7 +4,7 @@ render_shape.py — population squares laid out in the city's own map shape.
 Each square is a fixed slice of population (default 50,000 people). Squares are
 placed on the densest cells of the city's population raster, so the block of
 squares takes the silhouette of the built-up area and grows outward as the city
-grows. Fill colour is the heat metric on a continuous white-yellow-red ramp.
+grows. Fill colour is the heat metric on a continuous yellow-red ramp.
 
 Because count and shape are both driven by the data, the picture stays honest:
 the number of squares is the population, the arrangement is where people are.
@@ -48,12 +48,14 @@ MAX_COLS = 5           # cities per row; more cities wrap onto a 1920x1080 frame
 FOOT_RESERVE = 68      # space kept below the tiles for the legend
 COL_PAD = 24           # horizontal breathing room per column
 
+# yellow to red, no white end: every square reads as heat, and the range is
+# spent on the hot half of the scale where these cities sit
 RAMP = [
-    (0.00, (255, 255, 255)),
-    (0.32, (255, 233, 168)),
-    (0.55, (251, 192, 45)),
-    (0.80, (232, 99, 42)),
-    (1.00, (179, 22, 27)),
+    (0.00, (255, 224, 102)),
+    (0.30, (251, 176, 45)),
+    (0.60, (236, 112, 38)),
+    (0.82, (205, 52, 32)),
+    (1.00, (150, 14, 24)),
 ]
 
 # DejaVu on Linux, Helvetica Neue on macOS (a .ttc, so faces are picked by index)

@@ -4,7 +4,7 @@ Twenty of the world's hottest large cities, 1975–2025, one frame per year. Eac
 city is drawn as squares laid on its own built-up area, so the block of squares
 takes the shape of the city map. One square is a fixed slice of population, placed
 on the densest cells first, so the count is the population and the arrangement is
-where people live. Every square takes its colour from a white–yellow–red ramp
+where people live. Every square takes its colour from a yellow–red ramp
 driven by that year's temperature plus the cell's own heat-island offset.
 
 Outputs: `out/heat-cities.gif`, `out/heat-cities.mp4`, `out/heat-cities-final.png`
@@ -100,7 +100,7 @@ same data and follow the same rules, so the two agree.
    footprint, ring by ring, and is marked `*` with a footnote. Without this the
    leftovers filled the grid in row order and drew a rectangle.
 6. **Colour** each square by that year's city mean plus the cell's own offset, on
-   a white–yellow–red ramp anchored by `--lo`/`--hi`, which the legend prints.
+   a yellow–red ramp anchored by `--lo`/`--hi`, which the legend prints.
 7. **Animate** 51 frames, one per year. `--fps` sets the rate (the slide render
    uses 3, a 17 s loop); the last frame holds about a second before looping.
 
@@ -171,7 +171,7 @@ Pages: <https://tigerkrittaphas.github.io/hottest_city/>
   coastal strip — get partly filled in by stray squares.
 - **Colour anchors 28–38 °C.** The automatic range (25.8–39.2) left everything
   outside the Middle East and the Sahel pale yellow. The tighter range clamps a
-  few extremes — the coolest edges of Hyderabad and Delhi go pure white — and the
+  few extremes — the coolest edges of Hyderabad and Delhi sit at the pale-yellow floor — and the
   legend prints the anchors so the slide stays honest.
 - **16×16 grid at 20 cities**, four rows of five on a 1920×1080 frame
   (`MAX_COLS`), because 20 divides evenly into it — seven across would leave a

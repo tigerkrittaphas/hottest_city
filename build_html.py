@@ -64,7 +64,7 @@ PAGE = """<!DOCTYPE html>
   footer { border-top: 1px solid var(--rule); padding-top: 20px; display: grid;
     grid-template-columns: 240px 1fr; gap: 36px; align-items: center; }
   .legend-bar { height: 12px; border-radius: 2px; background: linear-gradient(90deg,
-    #FFFFFF 0%, #FFE9A8 32%, #FBC02D 55%, #E8632A 80%, #B3161B 100%); }
+    #FFE066 0%, #FBB02D 30%, #EC7026 60%, #CD3420 82%, #960E18 100%); }
   .legend-scale { display: flex; justify-content: space-between; font-size: 11.5px;
     color: var(--ink-quiet); margin-top: 7px; font-variant-numeric: tabular-nums; }
   .transport { display: flex; align-items: center; gap: 18px; }
@@ -169,8 +169,8 @@ const EPOCHS = DATA.epochs;
 const HEAT_YEARS = DATA.heat_years;
 const Y0 = EPOCHS[0], Y1 = EPOCHS[EPOCHS.length - 1];
 
-const RAMP = [[0,[255,255,255]],[0.32,[255,233,168]],[0.55,[251,192,45]],
-              [0.80,[232,99,42]],[1,[179,22,27]]];
+const RAMP = [[0,[255,224,102]],[0.30,[251,176,45]],[0.60,[236,112,38]],
+              [0.82,[205,52,32]],[1,[150,14,24]]];
 
 function rampColor(t) {
   t = Math.max(0, Math.min(1, t));
@@ -182,7 +182,7 @@ function rampColor(t) {
       return `rgb(${m[0]},${m[1]},${m[2]})`;
     }
   }
-  return "rgb(179,22,27)";
+  return "rgb(150,14,24)";
 }
 
 function atYear(series, year, axis = EPOCHS) {
