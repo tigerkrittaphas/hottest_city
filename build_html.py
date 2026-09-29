@@ -137,7 +137,7 @@ PAGE = """<!DOCTYPE html>
     </div>
     <div class="trend-wrap">
       <svg id="trend" viewBox="0 0 1180 300" role="img"
-           aria-label="Mean daily maximum temperature per year, 1975 to 2025, for 20 cities and their mean"></svg>
+           aria-label="__HEATLABELCAP__ per year, 1975 to 2025, for 20 cities and their mean"></svg>
       <div class="tip" id="tip"></div>
     </div>
     <details class="table-view">
@@ -228,7 +228,7 @@ document.getElementById("hi").textContent = PER_CITY ? "hottest" : DATA.cities[0
 if (PER_CITY) document.getElementById("mid").textContent = "each city on its own scale";
 document.getElementById("note").innerHTML =
   (DATA.synthetic ? "<b>" + DATA.source_note + "</b> " : DATA.source_note + " ") +
-  "Reanalysis temperature does not resolve the urban heat island, so fill shows " +
+  "Reanalysis data does not resolve the urban heat island, so fill shows " +
   "regional warming rather than the city\\u2019s own heat.";
 
 // interpolate the density field, rank cells, draw the top N
@@ -428,7 +428,7 @@ const warmed = tSeries.filter(s => { const d = decades(s); return d[1] > d[0]; }
 const meanEarly = tMean.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
 const meanLate = tMean.slice(-10).reduce((a, b) => a + b, 0) / 10;
 document.getElementById("trend-deck").textContent =
-  "Each thin line is one city's mean daily maximum for that year; the orange line is the 20-city mean, "
+  "Each thin line is one city's " + DATA.heat_label + " for that year; the orange line is the 20-city mean, "
   + meanEarly.toFixed(1) + "° across 1975–1984 and " + meanLate.toFixed(1) + "° across 2016–2025. "
   + warmed + " of the " + tSeries.length + " cities are hotter in the recent decade than the first; "
   + (tSeries.length - warmed) + " are not. Single years swing with El Niño, so the trend lives in the "
@@ -502,7 +502,7 @@ def main(data_dir, out_path, lo, hi, per_square, scale):
 
     payload = dict(
         epochs=meta["epochs"], heat_years=meta.get("heat_years", meta["epochs"]),
-        unit=meta.get("unit", ""),
+        unit=meta.get("unit", ""), heat_label=meta["heat_label"],
         source_note=meta["source_note"], synthetic=meta.get("synthetic", False),
         cities=[dict(name=c["name"], pop=c["pop"], heat=c["heat"], lo=r[0], hi=r[1],
                      offset=[round(float(v), 2) for v in c["offset"].ravel()],
@@ -513,6 +513,7 @@ def main(data_dir, out_path, lo, hi, per_square, scale):
 
     page = (PAGE
             .replace("__TITLE__", meta.get("title", "Growing into the heat"))
+            .replace("__HEATLABELCAP__", meta["heat_label"][:1].upper() + meta["heat_label"][1:])
             .replace("__HEATLABEL__", meta["heat_label"])
             .replace("__SCALENOTE__", " Every city has its own colour scale, running from its"
                      " coolest to its hottest square across 1975\u20132025, so compare colours"

@@ -159,6 +159,9 @@ def load(data_dir):
         # within-city heat offset in °C; zero-filled if the pull didn't supply one
         c["offset"] = (coarsen(z["heat_offset"], GRID) if "heat_offset" in z
                        else np.zeros((GRID, GRID)))
+        # a heat-index pull stores the offset in degC of temperature plus the
+        # city's heat-index degrees per degree, so the scaling is applied here
+        c["offset"] = c["offset"] * c.get("offset_gain", 1.0)
         # fixed dither weights: same every frame, so squares never flicker
         rng = np.random.default_rng(abs(hash(c["slug"])) % (2**32))
         c["dither"] = np.clip(rng.random((GRID, GRID)), 0.18, 1.0)

@@ -5,8 +5,8 @@ city is drawn as squares laid on its own built-up area, so the block of squares
 takes the shape of the city map. One square is a fixed slice of population, placed
 on the densest cells first, so the count is the population and the arrangement is
 where people live. Every square takes its colour from a white–yellow–red ramp
-driven by that year's temperature plus the cell's own heat-island offset, on a
-scale fitted to each city.
+driven by that year's **heat index** — how hot it feels once humidity is counted —
+plus the cell's own heat-island offset, on a scale fitted to each city.
 
 Outputs: `out/heat-cities.gif`, `out/heat-cities.mp4`, `out/heat-cities-final.png`
 (1920×1080, four rows of five) and `page.html`, a standalone interactive page.
@@ -19,7 +19,7 @@ Everything comes from Earth Engine. Nothing is drawn by hand.
 |---|---|---|---|
 | Built-up area | `JRC/GHSL/P2023A/GHS_BUILT_S` (R2023A) | 100 m | 1975–2030, every 5 years |
 | Population | `JRC/GHSL/P2023A/GHS_POP` (R2023A) | 100 m | 1975–2030, every 5 years |
-| City temperature | `ECMWF/ERA5_LAND/DAILY_AGGR` | 11 km (0.1°) | 1950–present, daily |
+| City heat index | `ECMWF/ERA5_LAND/DAILY_AGGR` (max temperature + dewpoint) | 11 km (0.1°) | 1950–present, daily |
 | Within-city pattern | `MODIS/061/MOD11A2` `LST_Day_1km` | 927 m | 2000–present, 8-day |
 
 Each city is a 75 km box around its centre (`extent_km` in `pull_ghsl_era5.py`),
@@ -59,15 +59,25 @@ Two selection judgements worth knowing:
   sea and other no-data cells as **−200 rather than masking them**, which made
   early totals negative (Karachi 2020 came out as −14.3M), so cells below zero are
   masked before summing.
-- **Temperature**, one value per calendar year, 1975–2025 (51 values): the mean of
-  `temperature_2m_max` over that year, averaged across the box at 9 km sampling.
-  All 51 years are computed server-side in one request. Single-year values, so
-  El Niño years show as real swings rather than a smoothed trend.
+- **Heat index**, one value per calendar year, 1975–2025 (51 values): for every
+  day, the US National Weather Service heat index (`heat_index.py`: the Rothfusz
+  regression, Steadman's simple form below about 27 °C, and the two humidity
+  adjustments) from `temperature_2m_max` and `dewpoint_temperature_2m`, then the
+  mean over that year, averaged across the box at 9 km sampling. All 51 years are
+  computed server-side in one request. Single-year values, so El Niño years show
+  as real swings rather than a smoothed trend. `python heat_index.py` checks the
+  formula against the NWS chart; the Earth Engine version matches it exactly.
+  `--metric tmax_mean` pulls plain mean daily max temperature instead.
 - **Within-city offset**, one static raster: the 2015–2024 mean of MODIS daytime
   land surface temperature, minus its own spatial mean, with its spread rescaled
   to at most about 4 °C so it reads as an air-temperature-like spread. Sea and
   never-observed pixels are filled with a sentinel and set to **0 offset**; left
   as raw fill they became −20 °C artefacts that dragged coastal squares cold.
+- **Offset gain**, one number per city: how many degrees of heat index one degree
+  of temperature adds, at that city's own 2015–2024 days with dewpoint held fixed.
+  The offset raster stays in °C of temperature and the renderers multiply by the
+  gain, because in humid air a hotter street feels hotter by more than a degree.
+  It runs from 0.91 (Riyadh) to 1.45 (Manila).
 
 `--resume` reuses rasters and series already written, so adding one city costs one
 city's queries rather than a full re-pull. Add `--metric tmax|apparent --thresh N`
@@ -130,12 +140,12 @@ earthengine authenticate
 export EE_PROJECT=your-cloud-project
 
 python rank_cities.py city_heat_rank.csv                              # optional, re-rank
-python pull_ghsl_era5.py --out data                                   # full pull
-python pull_ghsl_era5.py --out data --resume                          # only what's missing
-python render_shape.py --data data --out out --fps 2                  # gif + mp4 + png
-python build_html.py --data data --out page.html
+python pull_ghsl_era5.py --out data_hi --metric hi_mean               # full pull
+python pull_ghsl_era5.py --out data_hi --metric hi_mean --resume      # only what's missing
+python render_shape.py --data data_hi --out out --fps 2               # gif + mp4 + png
+python build_html.py --data data_hi --out page.html
 # one shared ramp for every city instead of one per city:
-python render_shape.py --data data --out out --scale shared --lo 28 --hi 38
+python render_shape.py --data data_hi --out out --scale shared
 ```
 
 Without Earth Engine access:
@@ -155,7 +165,7 @@ stand-ins.
 which stays ignored as a build product. Refresh it after a rebuild:
 
 ```bash
-python build_html.py --data data --out page.html
+python build_html.py --data data_hi --out page.html
 cp page.html site/index.html
 git commit -am "Update published page" && git push
 ```
@@ -209,6 +219,16 @@ Pages: <https://tigerkrittaphas.github.io/hottest_city/>
 4. **The GIF and the page can place squares differently.** The scatter seed comes
    from Python's `hash()`, which is randomised per process, so tie-breaks differ
    between runs. Square counts always match. A fixed seed is a one-line fix.
-5. **Single-year temperatures move both ways.** With yearly values some cities
+5. **Heat index pairs the day's peak temperature with its mean dewpoint.** The
+   daily files carry no dewpoint at the hour of the maximum. Dewpoint moves far
+   less through the day than temperature, so this is close, but it reads a little
+   humid for the afternoon and so runs slightly high. Hourly ERA5-Land would fix
+   it at 24× the compute. The gain-scaled offset is also an estimate: city cores
+   tend to be drier than their edges, which neither dataset sees.
+6. **The 20 cities were ranked by temperature, not heat index.** Re-ranking by
+   heat index would likely favour humid coastal cities over dry ones (Riyadh and
+   Baghdad have the lowest heat index of the 20). `rank_cities.py` has not been
+   updated.
+7. **Single-year values move both ways.** With yearly values some cities
    read cooler in 2025 than in 2020 (Delhi, Hyderabad, Kolkata). That is weather,
    not a bug; a 5-year mean would smooth it at the cost of honesty about variance.

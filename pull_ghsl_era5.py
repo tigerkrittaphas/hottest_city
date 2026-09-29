@@ -23,7 +23,13 @@ Setup (once):
 
 Run:
     python pull_ghsl_era5.py --out data                    # mean daily max, degC
+    python pull_ghsl_era5.py --out data_hi --metric hi_mean   # mean daily max heat index
     python pull_ghsl_era5.py --out data --metric apparent --thresh 40
+
+--metric hi_mean is the NWS heat index (heat_index.py) from the daily maximum
+temperature and the daily mean dewpoint. The within-city offset is kept in degC
+of temperature and stored with offset_gain, the city's heat-index degrees per
+degree of temperature, which the renderers apply.
 
 --metric tmax / apparent count days above --thresh instead. A degC within-city
 offset cannot be added to a day count, so those runs write a zero offset and
@@ -39,6 +45,8 @@ import os
 
 import numpy as np
 import ee
+
+from heat_index import hi_ee
 
 # lon, lat of the urban core. extent_km must be wide enough for the 2025
 # footprint or the tile clips — check the last frame and widen if needed.
@@ -137,10 +145,24 @@ def hot_day(img, metric, thresh):
     return val.gt(thresh).rename("hot")
 
 
+def daily_hi(img, dt=0.0):
+    """The day's peak heat index (degC): daily max temperature, shifted by dt,
+    paired with the day's mean dewpoint.
+
+    DAILY_AGGR has no dewpoint at the hour of the maximum. Dewpoint moves far
+    less through the day than temperature, so the daily mean is a close stand-in,
+    though it reads slightly humid for the afternoon and so runs a little high.
+    """
+    t = img.select("temperature_2m_max").subtract(273.15).add(dt)
+    td = img.select("dewpoint_temperature_2m").subtract(273.15)
+    return hi_ee(t, td)
+
+
 def heat_series(geom, metric="tmax_mean", thresh=35.0, years=HEAT_YEARS):
     """One heat value per calendar year, computed server-side in one request.
 
     tmax_mean: that year's mean daily maximum 2 m air temperature (degC).
+    hi_mean: that year's mean daily peak heat index (degC), NWS formula.
     tmax / apparent: days in that year where the metric exceeds `thresh`.
     Single-year values, so El Nino and La Nina years show as real swings.
     """
@@ -151,12 +173,29 @@ def heat_series(geom, metric="tmax_mean", thresh=35.0, years=HEAT_YEARS):
         year_days = col.filterDate(start, start.advance(1, "year"))
         if metric == "tmax_mean":
             img = year_days.select("temperature_2m_max").mean().subtract(273.15)
+        elif metric == "hi_mean":
+            img = year_days.map(daily_hi).mean()
         else:
             img = year_days.map(lambda d: hot_day(d, metric, thresh)).sum()
         return img.reduceRegion(ee.Reducer.mean(), geom, 9000,
                                 maxPixels=1e10).values().get(0)
 
     return [float(v) for v in ee.List(years).map(one).getInfo()]
+
+
+def hi_gain(geom, years=(2015, 2024)):
+    """Heat index degrees per degree of air temperature, at this city's own days.
+
+    The within-city offset is in degC of temperature. In humid air one degree
+    of temperature is worth more than one degree of heat index, so the offset is
+    scaled by this before it is added to a heat-index city mean. Dewpoint is
+    held fixed: a hotter street has the same air moisture, so lower humidity.
+    """
+    col = (ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
+           .filterDate(f"{years[0]}-01-01", f"{years[1]}-12-31"))
+    img = col.map(lambda d: daily_hi(d, 0.5).subtract(daily_hi(d, -0.5))).mean()
+    return float(img.reduceRegion(ee.Reducer.mean(), geom, 9000,
+                                  maxPixels=1e10).values().get(0).getInfo())
 
 
 def heat_offset(geom, scale, years=(2015, 2024)):
@@ -194,11 +233,15 @@ def heat_offset(geom, scale, years=(2015, 2024)):
 def main(out_dir, metric, thresh, resume):
     ee.Initialize(project=os.environ.get("EE_PROJECT"))
     os.makedirs(out_dir, exist_ok=True)
-    days = metric != "tmax_mean"
+    days = metric in ("tmax", "apparent")
     if days:
         heat_label = (f"days per year above {thresh:g}\u00b0C "
                       + ("daily max" if metric == "tmax" else "apparent temperature"))
         pattern_note = "Within-city: not shown for day counts."
+    elif metric == "hi_mean":
+        heat_label = "mean daily maximum heat index"
+        pattern_note = ("Within-city: MODIS LST 2015\u20132024, held fixed, "
+                        "scaled to heat index.")
     else:
         heat_label = "mean daily maximum temperature"
         pattern_note = "Within-city: MODIS LST 2015\u20132024, held fixed."
@@ -245,13 +288,24 @@ def main(out_dir, metric, thresh, resume):
             heat = heat_series(geom, metric, thresh)
         print(f"  {c['slug']} heat {HEAT_YEARS[0]}-{HEAT_YEARS[-1]} ({meta['unit'].strip()}): "
               + " ".join(f"{v:.1f}" for v in heat))
+        # heat_offset stays in degC of temperature; the renderers multiply it by
+        # offset_gain, so a resumed run never scales an already-scaled raster
+        if metric != "hi_mean":
+            gain = 1.0
+        elif same_metric and "offset_gain" in cached.files:
+            gain = float(cached["offset_gain"])
+        else:
+            gain = hi_gain(geom)
+        if metric == "hi_mean":
+            print(f"  {c['slug']} offset gain {gain:.2f} heat-index degC per degC")
         np.savez_compressed(path, density=dens, heat_offset=off,
                             years=np.array(EPOCHS), pop=np.array(pop),
                             heat=np.array(heat), heat_years=np.array(HEAT_YEARS),
-                            metric=np.array(metric))
+                            metric=np.array(metric), offset_gain=np.array(gain))
         meta["cities"].append(dict(slug=c["slug"], name=c["name"],
                                    country=c.get("country", ""),
-                                   extent_km=c["extent_km"], pop=pop, heat=heat))
+                                   extent_km=c["extent_km"], pop=pop, heat=heat,
+                                   offset_gain=round(gain, 3)))
     json.dump(meta, open(os.path.join(out_dir, "cities.json"), "w"), indent=1)
     print("wrote ->", out_dir)
 
@@ -259,7 +313,8 @@ def main(out_dir, metric, thresh, resume):
 if __name__ == "__main__":
     p = argparse.ArgumentParser()
     p.add_argument("--out", dest="out_dir", default="data")
-    p.add_argument("--metric", default="tmax_mean", choices=["tmax_mean", "tmax", "apparent"])
+    p.add_argument("--metric", default="tmax_mean",
+                   choices=["tmax_mean", "hi_mean", "tmax", "apparent"])
     p.add_argument("--thresh", type=float, default=35.0)
     p.add_argument("--resume", action="store_true",
                    help="reuse rasters and series already written to <out>")

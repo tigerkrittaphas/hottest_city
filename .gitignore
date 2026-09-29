@@ -15,6 +15,7 @@ env/
 # cities, so commit this instead if collaborators won't have EE access.
 data/
 data_stub/
+data_hi/
 
 # Rendered output: gif + mp4 + png (~3.7 MB) and the standalone pages,
 # all rebuilt by render_shape.py / build_html.py from data/.
