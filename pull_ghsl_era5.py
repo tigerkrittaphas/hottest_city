@@ -239,7 +239,7 @@ def main(out_dir, metric, thresh, resume):
                       + ("daily max" if metric == "tmax" else "apparent temperature"))
         pattern_note = "Within-city: not shown for day counts."
     elif metric == "hi_mean":
-        heat_label = "mean daily maximum heat index"
+        heat_label = "mean daily maximum heat index (feels-like temperature)"
         pattern_note = ("Within-city: MODIS LST 2015\u20132024, held fixed, "
                         "scaled to heat index.")
     else:
